@@ -1,7 +1,11 @@
 import { Address, Transaction, UserSigner, TransactionComputer } from '@multiversx/sdk-core';
-import { X402Payload } from '../domain/types';
-import { ISettlementStorage } from '../domain/storage';
+import { ApiNetworkProvider, ProxyNetworkProvider } from '@multiversx/sdk-network-providers';
+import { X402Payload } from '../domain/types.js';
+import { ISettlementStorage } from '../domain/storage.js';
 import crypto from 'crypto';
+import { pino } from 'pino';
+
+const logger = pino();
 
 export class Settler {
     private transactionComputer = new TransactionComputer();
@@ -13,15 +17,19 @@ export class Settler {
     ) { }
 
     async settle(payload: X402Payload): Promise<{ success: boolean; txHash?: string }> {
-        // 1. Idempotency Check
         const id = this.calculateId(payload);
+        logger.info({ settlementId: id, sender: payload.sender }, 'Starting settlement process');
+
+        // 1. Idempotency Check
         const existing = await this.storage.get(id);
 
         if (existing && existing.status === 'completed') {
+            logger.info({ settlementId: id, txHash: existing.txHash }, 'Settlement already completed, returning existing hash');
             return { success: true, txHash: existing.txHash };
         }
 
         if (existing && existing.status === 'pending') {
+            logger.warn({ settlementId: id }, 'Settlement already in progress');
             throw new Error('Settlement already in progress');
         }
 
@@ -39,25 +47,26 @@ export class Settler {
             let txHash: string;
 
             if (this.relayerSigner) {
-                // Relayed V3
+                logger.info({ relayer: this.relayerSigner.getAddress().toBech32() }, 'Broadcasting via Relayed V3');
                 txHash = await this.sendRelayedV3(payload);
             } else {
-                // Direct broadcast (already signed by sender)
+                logger.info('Broadcasting direct transaction');
                 txHash = await this.sendDirect(payload);
             }
 
             // 3. Update to Completed
             await this.storage.updateStatus(id, 'completed', txHash);
+            logger.info({ settlementId: id, txHash }, 'Settlement completed successfully');
             return { success: true, txHash };
 
         } catch (error: any) {
+            logger.error({ settlementId: id, error: error.message }, 'Settlement failed');
             await this.storage.updateStatus(id, 'failed');
             throw new Error(`Settlement failed: ${error.message}`);
         }
     }
 
     private calculateId(payload: X402Payload): string {
-        // Use signature as unique ID for the payment
         return crypto.createHash('sha256').update(payload.signature).digest('hex');
     }
 
@@ -75,8 +84,8 @@ export class Settler {
             signature: Buffer.from(payload.signature, 'hex'),
         });
 
-        const result = await this.provider.sendTransaction(tx);
-        return result;
+        const txHash = await this.provider.sendTransaction(tx);
+        return txHash;
     }
 
     private async sendRelayedV3(payload: X402Payload): Promise<string> {
@@ -102,7 +111,7 @@ export class Settler {
         const bytesToSign = this.transactionComputer.computeBytesForSigning(tx);
         tx.relayerSignature = await this.relayerSigner.sign(bytesToSign);
 
-        const result = await this.provider.sendTransaction(tx);
-        return result;
+        const txHash = await this.provider.sendTransaction(tx);
+        return txHash;
     }
 }

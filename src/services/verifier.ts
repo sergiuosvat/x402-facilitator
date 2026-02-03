@@ -1,14 +1,22 @@
 import { Address, UserVerifier, Transaction } from '@multiversx/sdk-core';
-import { X402Payload, X402Requirements } from '../domain/types';
+import { ApiNetworkProvider, ProxyNetworkProvider } from '@multiversx/sdk-network-providers';
+import { X402Payload, X402Requirements } from '../domain/types.js';
+import { pino } from 'pino';
+
+const logger = pino();
 
 export class Verifier {
     static async verify(payload: X402Payload, requirements: X402Requirements, provider?: any): Promise<{ isValid: boolean; payer: string }> {
+        logger.info({ sender: payload.sender, receiver: payload.receiver }, 'Verifying payment payload');
+
         // 1. Static Checks (Time)
         const now = Math.floor(Date.now() / 1000);
         if (payload.validAfter && now < payload.validAfter) {
+            logger.warn({ validAfter: payload.validAfter, now }, 'Transaction not yet valid');
             throw new Error('Transaction not yet valid');
         }
         if (payload.validBefore && now > payload.validBefore) {
+            logger.warn({ validBefore: payload.validBefore, now }, 'Transaction expired');
             throw new Error('Transaction expired');
         }
 
@@ -21,16 +29,21 @@ export class Verifier {
         const isValidSignature = await verifier.verify(message, Buffer.from(payload.signature, 'hex'));
 
         if (!isValidSignature) {
+            logger.error({ sender: payload.sender }, 'Invalid signature detected');
             throw new Error('Invalid signature');
         }
 
         // 3. Requirements Match
-        if (payload.receiver !== requirements.payTo) {
+        const isEsdt = payload.data?.startsWith('MultiESDTNFTTransfer');
+
+        if (!isEsdt && payload.receiver !== requirements.payTo) {
+            logger.error({ payloadReceiver: payload.receiver, requiredPayTo: requirements.payTo }, 'Receiver mismatch');
             throw new Error('Receiver mismatch');
         }
 
         if (requirements.asset === 'EGLD') {
             if (BigInt(payload.value) < BigInt(requirements.amount)) {
+                logger.error({ payloadValue: payload.value, requiredAmount: requirements.amount }, 'Insufficient amount');
                 throw new Error('Insufficient amount');
             }
         } else {
@@ -43,6 +56,7 @@ export class Verifier {
             await this.simulate(payload, provider);
         }
 
+        logger.info({ sender: payload.sender }, 'Payment payload verified successfully');
         return { isValid: true, payer: payload.sender };
     }
 
@@ -63,9 +77,12 @@ export class Verifier {
         try {
             const simulationResult = await provider.simulateTransaction(tx);
             if (simulationResult.execution.result !== 'success') {
-                throw new Error(`Simulation failed: ${simulationResult.execution.message || 'Unknown error'}`);
+                const message = simulationResult.execution.message || 'Unknown error';
+                logger.error({ error: message }, 'Simulation failed');
+                throw new Error(`Simulation failed: ${message}`);
             }
         } catch (error: any) {
+            logger.error({ error: error.message }, 'Simulation error');
             throw new Error(`Simulation error: ${error.message}`);
         }
     }
@@ -86,10 +103,43 @@ export class Verifier {
         return Buffer.from(parts.join('|'));
     }
 
-    private static verifyESDT(payload: X402Payload, _requirements: X402Requirements) {
+    private static verifyESDT(payload: X402Payload, requirements: X402Requirements) {
         if (!payload.data?.startsWith('MultiESDTNFTTransfer')) {
             throw new Error('Not an ESDT transfer');
         }
-        // Parsing logic omitted for brevity in this step, but would check token and amount
+
+        const parts = payload.data.split('@');
+        if (parts.length < 6) {
+            throw new Error('Invalid MultiESDTNFTTransfer data');
+        }
+
+        const receiverHex = parts[1];
+        const tokenHex = parts[3];
+        const amountHex = parts[5];
+
+        try {
+            const actualReceiverAddress = new Address(receiverHex);
+            const actualReceiver = actualReceiverAddress.toBech32();
+            const actualToken = Buffer.from(tokenHex, 'hex').toString();
+            const actualAmount = BigInt('0x' + amountHex);
+
+            if (actualReceiver !== requirements.payTo) {
+                logger.error({ actualReceiver, requiredPayTo: requirements.payTo }, 'ESDT receiver mismatch');
+                throw new Error('ESDT receiver mismatch');
+            }
+
+            if (actualToken !== requirements.asset) {
+                logger.error({ actualToken, requiredAsset: requirements.asset }, 'ESDT token mismatch');
+                throw new Error('ESDT token mismatch');
+            }
+
+            if (actualAmount < BigInt(requirements.amount)) {
+                logger.error({ actualAmount: actualAmount.toString(), requiredAmount: requirements.amount }, 'Insufficient ESDT amount');
+                throw new Error('Insufficient ESDT amount');
+            }
+        } catch (error: any) {
+            logger.error({ error: error.message, receiverHex }, 'Error in verifyESDT Address creation');
+            throw error;
+        }
     }
 }

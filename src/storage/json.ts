@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { ISettlementRecord, ISettlementStorage } from '../domain/storage';
+import { ISettlementRecord, ISettlementStorage } from '../domain/storage.js';
 
 export class JsonSettlementStorage implements ISettlementStorage {
     private records: Map<string, ISettlementRecord> = new Map();

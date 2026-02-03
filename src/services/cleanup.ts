@@ -1,4 +1,4 @@
-import { ISettlementStorage } from '../domain/storage';
+import { ISettlementStorage } from '../domain/storage.js';
 
 export class CleanupService {
     private timer?: NodeJS.Timeout;

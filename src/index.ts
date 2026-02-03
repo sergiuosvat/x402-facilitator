@@ -1,19 +1,24 @@
 import express, { Request, Response } from 'express';
-import { Verifier } from './services/verifier';
-import { Settler } from './services/settler';
-import { CleanupService } from './services/cleanup';
-import { JsonSettlementStorage } from './storage/json';
-import { VerifyRequestSchema, SettleRequestSchema } from './domain/schemas';
+import { Verifier } from './services/verifier.js';
+import { Settler } from './services/settler.js';
+import { CleanupService } from './services/cleanup.js';
+import { JsonSettlementStorage } from './storage/json.js';
+import { SqliteSettlementStorage } from './storage/sqlite.js';
+import { VerifyRequestSchema, SettleRequestSchema } from './domain/schemas.js';
 import { ProxyNetworkProvider } from '@multiversx/sdk-network-providers';
 import { UserSigner } from '@multiversx/sdk-core';
-import dotenv from 'dotenv';
+import { config } from './config.js';
 import fs from 'fs';
+import path from 'path';
+import { pino } from 'pino';
 
-dotenv.config();
+const logger = pino({
+    level: config.logLevel,
+});
 
 export function createServer(dependencies: {
-    provider: any,
-    storage: JsonSettlementStorage,
+    provider: ProxyNetworkProvider,
+    storage: any,
     relayerSigner?: UserSigner
 }) {
     const { provider, storage, relayerSigner } = dependencies;
@@ -30,6 +35,7 @@ export function createServer(dependencies: {
             const result = await Verifier.verify(validated.payload, validated.requirements, provider);
             res.json(result);
         } catch (error: any) {
+            logger.warn({ error: error.message, body: req.body }, 'Verify request failed');
             res.status(400).json({ error: error.message });
         }
     });
@@ -41,6 +47,7 @@ export function createServer(dependencies: {
             const result = await settler.settle(validated.payload);
             res.json(result);
         } catch (error: any) {
+            logger.warn({ error: error.message, body: req.body }, 'Settle request failed');
             res.status(400).json({ error: error.message });
         }
     });
@@ -48,20 +55,49 @@ export function createServer(dependencies: {
     return app;
 }
 
-if (require.main === module) {
-    const PORT = process.env.PORT || 3000;
-    const providerUrl = process.env.NETWORK_PROVIDER || 'https://devnet-api.multiversx.com';
-    const provider = new ProxyNetworkProvider(providerUrl);
+async function start() {
+    const provider = new ProxyNetworkProvider(config.networkProvider);
 
-    if (!fs.existsSync('./data')) {
-        fs.mkdirSync('./data');
+    let storage;
+    if (config.storageType === 'sqlite') {
+        logger.info({ path: config.sqliteDbPath }, 'Using SQLite storage');
+        const sqliteStorage = new SqliteSettlementStorage(config.sqliteDbPath);
+        await sqliteStorage.init();
+        storage = sqliteStorage;
+    } else {
+        const dataDir = './data';
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir);
+        }
+        const jsonPath = path.join(dataDir, 'settlements.json');
+        logger.info({ path: jsonPath }, 'Using JSON storage');
+        storage = new JsonSettlementStorage(jsonPath);
     }
-    const storage = new JsonSettlementStorage('./data/settlements.json');
 
-    // Relayer initialization omitted for brevity, but would go here
+    let relayerSigner: UserSigner | undefined;
+    if (config.relayerPemPath) {
+        if (fs.existsSync(config.relayerPemPath)) {
+            try {
+                const pemContent = fs.readFileSync(config.relayerPemPath, 'utf8');
+                relayerSigner = UserSigner.fromPem(pemContent);
+                logger.info({ relayer: relayerSigner.getAddress().toBech32() }, 'Relayer initialized from PEM');
+            } catch (error: any) {
+                logger.error({ error: error.message, path: config.relayerPemPath }, 'Failed to initialize relayer from PEM');
+            }
+        } else {
+            logger.warn({ path: config.relayerPemPath }, 'Relayer PEM path configured but file not found');
+        }
+    }
 
-    const app = createServer({ provider, storage });
-    app.listen(PORT, () => {
-        console.log(`x402 Facilitator listening on port ${PORT}`);
+    const app = createServer({ provider, storage, relayerSigner });
+    app.listen(config.port, () => {
+        logger.info({ port: config.port, network: config.networkProvider }, 'x402 Facilitator started');
+    });
+}
+
+if (require.main === module) {
+    start().catch(err => {
+        logger.error({ error: err.message }, 'Failed to start server');
+        process.exit(1);
     });
 }

@@ -108,6 +108,60 @@ describe('Verifier Service', () => {
                 execution: { result: 'fail', message: 'invalid nonce' }
             })
         };
-        await expect(Verifier.verify(payload, requirements, mockProvider)).rejects.toThrow('Simulation failed: invalid nonce');
+        await expect(Verifier.verify(payload, requirements, mockProvider as any)).rejects.toThrow('Simulation failed: invalid nonce');
+    });
+
+    describe('ESDT Verification', () => {
+        const esdtRequirements: X402Requirements = {
+            payTo: bobBech32,
+            amount: '5000',
+            asset: 'TEST-abcd',
+            network: 'multiversx:D',
+        };
+
+        it('should verify a valid ESDT MultiESDTNFTTransfer', async () => {
+            // MultiESDTNFTTransfer data format:
+            // MultiESDTNFTTransfer@receiverAddressHex@numTopics@tokenIdentifierHex@nonceHex@amountHex
+            const receiverHex = bobAddress.valueOf().toString('hex');
+            const tokenHex = Buffer.from('TEST-abcd').toString('hex');
+            const data = `MultiESDTNFTTransfer@${receiverHex}@01@${tokenHex}@00@1388`; // 1388 hex is 5000
+
+            const payload = await createPayload({
+                data,
+                value: '0',
+                receiver: aliceBech32 // MultiESDTNFTTransfer receiver in tx is self
+            });
+
+            const result = await Verifier.verify(payload, esdtRequirements);
+            expect(result.isValid).toBe(true);
+        });
+
+        it('should fail if ESDT amount is insufficient', async () => {
+            const receiverHex = bobAddress.valueOf().toString('hex');
+            const tokenHex = Buffer.from('TEST-abcd').toString('hex');
+            const data = `MultiESDTNFTTransfer@${receiverHex}@01@${tokenHex}@00@03E8`; // 03E8 hex is 1000
+
+            const payload = await createPayload({
+                data,
+                value: '0',
+                receiver: aliceBech32
+            });
+
+            await expect(Verifier.verify(payload, esdtRequirements)).rejects.toThrow('Insufficient ESDT amount');
+        });
+
+        it('should fail if ESDT token mismatch', async () => {
+            const receiverHex = bobAddress.valueOf().toString('hex');
+            const tokenHex = Buffer.from('WRONG-token').toString('hex');
+            const data = `MultiESDTNFTTransfer@${receiverHex}@01@${tokenHex}@00@1388`;
+
+            const payload = await createPayload({
+                data,
+                value: '0',
+                receiver: aliceBech32
+            });
+
+            await expect(Verifier.verify(payload, esdtRequirements)).rejects.toThrow('ESDT token mismatch');
+        });
     });
 });

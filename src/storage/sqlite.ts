@@ -1,6 +1,6 @@
 import { open, Database } from 'sqlite';
 import sqlite3 from 'sqlite3';
-import { ISettlementRecord, ISettlementStorage } from '../domain/storage';
+import { ISettlementRecord, ISettlementStorage } from '../domain/storage.js';
 
 export class SqliteSettlementStorage implements ISettlementStorage {
     private db?: Database;

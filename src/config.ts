@@ -10,4 +10,5 @@ export const config = {
     cleanupIntervalMs: parseInt(process.env.CLEANUP_INTERVAL_MS || '300000', 10),
     storageType: process.env.STORAGE_TYPE || 'sqlite',
     sqliteDbPath: process.env.SQLITE_DB_PATH || './facilitator.db',
+    logLevel: process.env.LOG_LEVEL || 'info',
 };
