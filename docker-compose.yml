@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  facilitator:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=3000
+      - STORAGE_TYPE=sqlite
+      - SQLITE_DB_PATH=/app/data/facilitator.db
+      - NETWORK_PROVIDER=https://devnet-api.multiversx.com

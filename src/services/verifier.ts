@@ -1,12 +1,13 @@
 import { Address, UserVerifier, Transaction } from '@multiversx/sdk-core';
-import { ApiNetworkProvider, ProxyNetworkProvider } from '@multiversx/sdk-network-providers';
 import { X402Payload, X402Requirements } from '../domain/types.js';
 import { pino } from 'pino';
 
 const logger = pino();
 
+import { INetworkProvider } from '../domain/network.js';
+
 export class Verifier {
-    static async verify(payload: X402Payload, requirements: X402Requirements, provider?: any): Promise<{ isValid: boolean; payer: string }> {
+    static async verify(payload: X402Payload, requirements: X402Requirements, provider?: INetworkProvider): Promise<{ isValid: boolean; payer: string }> {
         logger.info({ sender: payload.sender, receiver: payload.receiver }, 'Verifying payment payload');
 
         // 1. Static Checks (Time)
@@ -60,7 +61,7 @@ export class Verifier {
         return { isValid: true, payer: payload.sender };
     }
 
-    public static async simulate(payload: X402Payload, provider: any) {
+    public static async simulate(payload: X402Payload, provider: INetworkProvider) {
         const tx = new Transaction({
             nonce: BigInt(payload.nonce),
             value: BigInt(payload.value),

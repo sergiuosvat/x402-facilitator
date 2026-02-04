@@ -4,7 +4,9 @@
     "signature": "4c85b1d475e46fe0e397ba05b0971c4116d9bfed68e0a8001cf9c0aa862c56636579736ab436f3471489e106f4149d43aee79f4c410585c8e384a1aa794eae0e",
     "payer": "erd132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqrdq0dawqvjzv73",
     "status": "completed",
-    "createdAt": 1770210636,
+    "createdAt": 1770212842,
+    "amount": "1000000",
+    "token": "EGLD",
     "isRead": false,
     "txHash": "tx-hash"
   }

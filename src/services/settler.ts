@@ -8,12 +8,14 @@ const logger = pino();
 
 import { RelayerManager } from './relayer_manager.js';
 
+import { INetworkProvider } from '../domain/network.js';
+
 export class Settler {
     private transactionComputer = new TransactionComputer();
 
     constructor(
         private storage: ISettlementStorage,
-        private provider: any,
+        private provider: INetworkProvider,
         private relayerManager?: RelayerManager
     ) { }
 
@@ -41,7 +43,9 @@ export class Settler {
             payer: payload.sender,
             status: 'pending',
             validBefore: payload.validBefore,
-            createdAt: Math.floor(Date.now() / 1000)
+            createdAt: Math.floor(Date.now() / 1000),
+            amount: payload.value,
+            token: 'EGLD' // Default for x402 V1/V2 pending native token support in schema
         });
 
         try {

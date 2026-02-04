@@ -5,7 +5,7 @@ import { CleanupService } from './services/cleanup.js';
 import { JsonSettlementStorage } from './storage/json.js';
 import { SqliteSettlementStorage } from './storage/sqlite.js';
 import { VerifyRequestSchema, SettleRequestSchema } from './domain/schemas.js';
-import { ISettlementRecord } from './domain/storage.js';
+import { ISettlementRecord, ISettlementStorage } from './domain/storage.js';
 import { ProxyNetworkProvider } from '@multiversx/sdk-network-providers';
 import { UserSigner } from '@multiversx/sdk-core';
 import { config } from './config.js';
@@ -18,9 +18,11 @@ const logger = pino({
     level: config.logLevel,
 });
 
+import { INetworkProvider } from './domain/network.js';
+
 export function createServer(dependencies: {
-    provider: ProxyNetworkProvider,
-    storage: any,
+    provider: INetworkProvider,
+    storage: ISettlementStorage,
     relayerManager?: RelayerManager
 }) {
     const { provider, storage, relayerManager } = dependencies;
@@ -61,8 +63,8 @@ export function createServer(dependencies: {
 
             // Transform to Moltbot schema if needed, but for now return raw records
             const events = unread.map((r: ISettlementRecord) => ({
-                amount: '0', // TODO: parse from storage if saved separately or kept in original payload
-                token: 'EGLD', // TODO: same
+                amount: r.amount || '0',
+                token: r.token || 'EGLD',
                 // For MVP, we return the record which contains the raw payload?
                 // SettlementStorage record structure is limited (id, signature, payer, status).
                 // We might need to store the FULL payload to be useful?

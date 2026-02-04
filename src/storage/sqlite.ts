@@ -28,18 +28,23 @@ export class SqliteSettlementStorage implements ISettlementStorage {
         // Migration support (simple check)
         try {
             await this.db.exec(`ALTER TABLE settlements ADD COLUMN isRead INTEGER DEFAULT 0`);
-        } catch (e) {
-            // Column likely exists
-        }
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (_e) { /* Column likely exists */ }
+
+        try {
+            await this.db.exec(`ALTER TABLE settlements ADD COLUMN amount TEXT`);
+            await this.db.exec(`ALTER TABLE settlements ADD COLUMN token TEXT`);
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (_e) { /* Columns likely exist */ }
     }
 
     async save(record: ISettlementRecord): Promise<void> {
         if (!this.db) await this.init();
         const isRead = record.isRead ? 1 : 0;
         await this.db!.run(`
-            INSERT INTO settlements(id, signature, payer, status, txHash, validBefore, createdAt, isRead)
-        VALUES(?, ?, ?, ?, ?, ?, ?, ?)
-        `, record.id, record.signature, record.payer, record.status, record.txHash, record.validBefore, record.createdAt, isRead);
+            INSERT INTO settlements(id, signature, payer, status, txHash, validBefore, createdAt, isRead, amount, token)
+        VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, record.id, record.signature, record.payer, record.status, record.txHash, record.validBefore, record.createdAt, isRead, record.amount, record.token);
     }
 
     async get(id: string): Promise<ISettlementRecord | null> {

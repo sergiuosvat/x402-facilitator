@@ -7,6 +7,8 @@ export interface ISettlementRecord {
     validBefore?: number;
     createdAt: number;
     isRead?: boolean;
+    amount?: string;
+    token?: string;
 }
 
 export interface ISettlementStorage {
