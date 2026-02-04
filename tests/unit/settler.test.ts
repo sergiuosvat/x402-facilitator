@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Settler } from '../../src/services/settler';
 import { X402Payload } from '../../src/domain/types';
 import { ISettlementStorage } from '../../src/domain/storage';
-import { UserSigner, UserSecretKey, Address } from '@multiversx/sdk-core';
+import { UserSecretKey, Address } from '@multiversx/sdk-core';
 import { RelayerManager } from '../../src/services/relayer_manager';
 
 describe('Settler Service', () => {
@@ -12,11 +12,12 @@ describe('Settler Service', () => {
     let settler: Settler;
 
     const aliceHex = '01'.repeat(32);
-    const aliceSecret = new UserSecretKey(Buffer.from(aliceHex, 'hex'));
+    // Convert Buffer to Uint8Array for SDK Core compatibility
+    const aliceSecret = new UserSecretKey(Uint8Array.from(Buffer.from(aliceHex, 'hex')));
     const aliceAddress = aliceSecret.generatePublicKey().toAddress();
     const aliceBech32 = aliceAddress.toBech32();
 
-    const bobAddress = new Address(Buffer.alloc(32, 2));
+    const bobAddress = new Address(Uint8Array.from(Buffer.alloc(32, 2)));
     const bobBech32 = bobAddress.toBech32();
 
     const payload: X402Payload = {
@@ -93,14 +94,14 @@ describe('Settler Service', () => {
 
     it('should handle Relayed V3', async () => {
         // Generate a valid address for the relayer mock
-        const relayerSecret = new UserSecretKey(Buffer.alloc(32, 3));
+        const relayerSecret = new UserSecretKey(Uint8Array.from(Buffer.alloc(32, 3)));
         const relayerAddressBech32 = relayerSecret.generatePublicKey().toAddress().toBech32();
 
         const mockRelayerSigner = {
             getAddress: () => ({
                 bech32: () => relayerAddressBech32
             }),
-            sign: vi.fn().mockResolvedValue(Buffer.from('relayer-sig'))
+            sign: vi.fn().mockResolvedValue(Uint8Array.from(Buffer.from('relayer-sig')))
         };
 
         vi.mocked(mockRelayerManager.getSignerForUser).mockReturnValue(mockRelayerSigner);
