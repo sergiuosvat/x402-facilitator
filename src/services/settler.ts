@@ -1,5 +1,4 @@
-import { Address, Transaction, UserSigner, TransactionComputer } from '@multiversx/sdk-core';
-import { ApiNetworkProvider, ProxyNetworkProvider } from '@multiversx/sdk-network-providers';
+import { Address, Transaction, TransactionComputer } from '@multiversx/sdk-core';
 import { X402Payload } from '../domain/types.js';
 import { ISettlementStorage } from '../domain/storage.js';
 import crypto from 'crypto';
@@ -7,13 +6,15 @@ import { pino } from 'pino';
 
 const logger = pino();
 
+import { RelayerManager } from './relayer_manager.js';
+
 export class Settler {
     private transactionComputer = new TransactionComputer();
 
     constructor(
         private storage: ISettlementStorage,
         private provider: any,
-        private relayerSigner?: UserSigner
+        private relayerManager?: RelayerManager
     ) { }
 
     async settle(payload: X402Payload): Promise<{ success: boolean; txHash?: string }> {
@@ -46,8 +47,8 @@ export class Settler {
         try {
             let txHash: string;
 
-            if (this.relayerSigner) {
-                logger.info({ relayer: this.relayerSigner.getAddress().toBech32() }, 'Broadcasting via Relayed V3');
+            if (this.relayerManager) {
+                logger.info({ sender: payload.sender }, 'Broadcasting via Relayed V3');
                 txHash = await this.sendRelayedV3(payload);
             } else {
                 logger.info('Broadcasting direct transaction');
@@ -78,10 +79,10 @@ export class Settler {
             sender: Address.newFromBech32(payload.sender),
             gasPrice: BigInt(payload.gasPrice),
             gasLimit: BigInt(payload.gasLimit),
-            data: payload.data ? Buffer.from(payload.data) : undefined,
+            data: payload.data ? Uint8Array.from(Buffer.from(payload.data)) : undefined,
             chainID: payload.chainID,
             version: payload.version,
-            signature: Buffer.from(payload.signature, 'hex'),
+            signature: Uint8Array.from(Buffer.from(payload.signature, 'hex')),
         });
 
         const txHash = await this.provider.sendTransaction(tx);
@@ -89,9 +90,12 @@ export class Settler {
     }
 
     private async sendRelayedV3(payload: X402Payload): Promise<string> {
-        if (!this.relayerSigner) throw new Error('Relayer signer not configured');
+        if (!this.relayerManager) throw new Error('Relayer manager not configured');
 
-        const relayerAddress = this.relayerSigner.getAddress();
+        // Select correct relayer for this sender (shard aware)
+        const relayerSigner = this.relayerManager.getSignerForUser(payload.sender);
+        // UserSigner from sdk-wallet returns UserAddress. Convert to Address from sdk-core.
+        const relayerAddress = Address.newFromBech32(relayerSigner.getAddress().bech32());
 
         const tx = new Transaction({
             nonce: BigInt(payload.nonce),
@@ -99,17 +103,17 @@ export class Settler {
             receiver: Address.newFromBech32(payload.receiver),
             sender: Address.newFromBech32(payload.sender),
             relayer: relayerAddress,
-            gasPrice: BigInt(payload.gasPrice),
+            gasPrice: BigInt(payload.gasPrice), // Note: Version 2 doesn't always use custom gasPrice but inherits
             gasLimit: BigInt(payload.gasLimit) + 50000n, // +50,000 for relayed
-            data: payload.data ? Buffer.from(payload.data) : undefined,
+            data: payload.data ? Uint8Array.from(Buffer.from(payload.data)) : undefined,
             chainID: payload.chainID,
-            version: payload.version,
-            signature: Buffer.from(payload.signature, 'hex'),
+            version: 2, // Force V2 for relayed
+            signature: Uint8Array.from(Buffer.from(payload.signature, 'hex')),
         });
 
         // Relayer signs as well
         const bytesToSign = this.transactionComputer.computeBytesForSigning(tx);
-        tx.relayerSignature = await this.relayerSigner.sign(bytesToSign);
+        tx.relayerSignature = Uint8Array.from(await relayerSigner.sign(bytesToSign));
 
         const txHash = await this.provider.sendTransaction(tx);
         return txHash;

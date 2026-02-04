@@ -11,6 +11,7 @@ import { config } from './config.js';
 import fs from 'fs';
 import path from 'path';
 import { pino } from 'pino';
+import { RelayerManager } from './services/relayer_manager.js';
 
 const logger = pino({
     level: config.logLevel,
@@ -19,13 +20,13 @@ const logger = pino({
 export function createServer(dependencies: {
     provider: ProxyNetworkProvider,
     storage: any,
-    relayerSigner?: UserSigner
+    relayerManager?: RelayerManager
 }) {
-    const { provider, storage, relayerSigner } = dependencies;
+    const { provider, storage, relayerManager } = dependencies;
     const app = express();
     app.use(express.json());
 
-    const settler = new Settler(storage, provider, relayerSigner);
+    const settler = new Settler(storage, provider, relayerManager);
     const cleanupService = new CleanupService(storage);
     cleanupService.start();
 
@@ -74,22 +75,9 @@ async function start() {
         storage = new JsonSettlementStorage(jsonPath);
     }
 
-    let relayerSigner: UserSigner | undefined;
-    if (config.relayerPemPath) {
-        if (fs.existsSync(config.relayerPemPath)) {
-            try {
-                const pemContent = fs.readFileSync(config.relayerPemPath, 'utf8');
-                relayerSigner = UserSigner.fromPem(pemContent);
-                logger.info({ relayer: relayerSigner.getAddress().toBech32() }, 'Relayer initialized from PEM');
-            } catch (error: any) {
-                logger.error({ error: error.message, path: config.relayerPemPath }, 'Failed to initialize relayer from PEM');
-            }
-        } else {
-            logger.warn({ path: config.relayerPemPath }, 'Relayer PEM path configured but file not found');
-        }
-    }
+    const relayerManager = new RelayerManager(config.relayerWalletsDir, config.relayerPemPath);
 
-    const app = createServer({ provider, storage, relayerSigner });
+    const app = createServer({ provider, storage, relayerManager });
     app.listen(config.port, () => {
         logger.info({ port: config.port, network: config.networkProvider }, 'x402 Facilitator started');
     });

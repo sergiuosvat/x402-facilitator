@@ -15,6 +15,7 @@
     "dependencies": {
         "@multiversx/sdk-core": "15.0.0",
         "@multiversx/sdk-network-providers": "2.9.3",
+        "@multiversx/sdk-wallet": "^4.6.0",
         "better-sqlite3": "12.6.2",
         "dotenv": "16.4.5",
         "express": "4.19.2",
