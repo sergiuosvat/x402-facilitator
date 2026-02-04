@@ -10,6 +10,7 @@ export interface X402Payload {
     version: number;
     options: number;
     signature: string; // Hex string
+    relayer?: string; // Bech32 (optional, for Relayed V3)
     validAfter?: number;
     validBefore?: number;
 }

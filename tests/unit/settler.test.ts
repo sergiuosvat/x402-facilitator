@@ -121,4 +121,38 @@ describe('Settler Service', () => {
         expect(sentTx.relayer.toString()).toBe(relayerAddressBech32);
         expect(sentTx.relayerSignature).toBeDefined();
     });
+
+    it('should success if relayer in payload matches expected relayer', async () => {
+        const relayerSecret = new UserSecretKey(Uint8Array.from(Buffer.alloc(32, 3)));
+        const relayerAddressBech32 = relayerSecret.generatePublicKey().toAddress().toBech32();
+
+        const mockRelayerSigner = {
+            getAddress: () => ({ bech32: () => relayerAddressBech32 }),
+            sign: vi.fn().mockResolvedValue(Uint8Array.from(Buffer.from('relayer-sig')))
+        };
+
+        vi.mocked(mockRelayerManager.getSignerForUser).mockReturnValue(mockRelayerSigner);
+        settler = new Settler(mockStorage, mockProvider, mockRelayerManager);
+        vi.mocked(mockStorage.get).mockResolvedValue(null);
+
+        const payloadWithRelayer = { ...payload, relayer: relayerAddressBech32 };
+        const result = await settler.settle(payloadWithRelayer);
+        expect(result.success).toBe(true);
+    });
+
+    it('should fail if relayer in payload mismatches expected relayer', async () => {
+        const relayerSecret = new UserSecretKey(Uint8Array.from(Buffer.alloc(32, 3)));
+        const relayerAddressBech32 = relayerSecret.generatePublicKey().toAddress().toBech32();
+
+        const mockRelayerSigner = {
+            getAddress: () => ({ bech32: () => relayerAddressBech32 }),
+            sign: vi.fn()
+        };
+
+        vi.mocked(mockRelayerManager.getSignerForUser).mockReturnValue(mockRelayerSigner);
+        settler = new Settler(mockStorage, mockProvider, mockRelayerManager);
+
+        const payloadWithWrongRelayer = { ...payload, relayer: bobBech32 }; // Bob is not the relayer
+        await expect(settler.settle(payloadWithWrongRelayer)).rejects.toThrow('Invalid relayer address');
+    });
 });

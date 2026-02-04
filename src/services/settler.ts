@@ -98,8 +98,19 @@ export class Settler {
 
         // Select correct relayer for this sender (shard aware)
         const relayerSigner = this.relayerManager.getSignerForUser(payload.sender);
-        // UserSigner from sdk-wallet returns UserAddress. Convert to Address from sdk-core.
-        const relayerAddress = Address.newFromBech32(relayerSigner.getAddress().bech32());
+        const expectedRelayerAddress = relayerSigner.getAddress().bech32();
+
+        // VALIDATION: In Relayed V3, the sender MUST set the relayer address BEFORE signing.
+        // We use the relayer address from the payload to ensure we don't invalidate the signature.
+        const relayerAddress = payload.relayer ? Address.newFromBech32(payload.relayer) : Address.newFromBech32(expectedRelayerAddress);
+
+        if (relayerAddress.toBech32() !== expectedRelayerAddress) {
+            logger.warn({
+                provided: relayerAddress.toBech32(),
+                expected: expectedRelayerAddress
+            }, 'Relayer address mismatch for sender shard');
+            throw new Error(`Invalid relayer address. Expected ${expectedRelayerAddress} for sender's shard.`);
+        }
 
         const tx = new Transaction({
             nonce: BigInt(payload.nonce),
@@ -111,7 +122,7 @@ export class Settler {
             gasLimit: BigInt(payload.gasLimit) + 50000n, // +50,000 for relayed
             data: payload.data ? Uint8Array.from(Buffer.from(payload.data)) : undefined,
             chainID: payload.chainID,
-            version: 2, // Force V2 for relayed
+            version: payload.version >= 2 ? payload.version : 2, // Ensure at least V2
             signature: Uint8Array.from(Buffer.from(payload.signature, 'hex')),
         });
 
