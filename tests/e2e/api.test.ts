@@ -27,7 +27,7 @@ describe('API E2E Tests', () => {
 
         mockProvider = {
             simulateTransaction: vi.fn().mockResolvedValue({
-                execution: { result: 'success' }
+                status: { status: 'success' }
             }),
             sendTransaction: vi.fn().mockResolvedValue('tx-hash'),
         };
