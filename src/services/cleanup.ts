@@ -17,13 +17,11 @@ export class CleanupService {
             const now = Math.floor(Date.now() / 1000);
             try {
                 await this.storage.deleteExpired(now);
-                try {
-                    await this.storage.deleteExpired(now);
-                    logger.info({ time: new Date().toISOString() }, 'Purged expired records');
-                } catch (e: any) {
-                    logger.error({ error: e.message }, 'Error during cleanup');
-                }
-            }, this.intervalMs);
+                logger.info({ time: new Date().toISOString() }, 'Purged expired records');
+            } catch (e: any) {
+                logger.error({ error: e.message }, 'Error during cleanup');
+            }
+        }, this.intervalMs);
         this.timer.unref(); // Don't keep the process alive just for this
     }
 

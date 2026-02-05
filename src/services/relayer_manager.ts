@@ -20,7 +20,6 @@ export class RelayerManager {
             try {
                 const pemContent = fs.readFileSync(singlePemPath, 'utf8');
                 this.singleSigner = UserSigner.fromPem(pemContent);
-                this.singleSigner = UserSigner.fromPem(pemContent);
                 logger.info({ address: this.singleSigner.getAddress().bech32() }, 'Loaded single relayer');
             } catch (e: any) {
                 logger.warn({ error: e.message }, 'Failed to load single PEM');
@@ -44,8 +43,6 @@ export class RelayerManager {
                     const address = Address.newFromBech32(userAddress.bech32());
                     const shard = this.getShard(address);
 
-                    this.signers.set(shard, signer);
-                    this.addresses.set(shard, address.toBech32());
                     this.signers.set(shard, signer);
                     this.addresses.set(shard, address.toBech32());
                     logger.info({ shard, address: address.toBech32() }, 'Loaded relayer for shard');
