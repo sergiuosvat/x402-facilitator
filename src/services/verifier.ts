@@ -6,8 +6,10 @@ const logger = pino();
 
 import { INetworkProvider } from '../domain/network.js';
 
+import { RelayerManager } from './relayer_manager.js';
+
 export class Verifier {
-    static async verify(payload: X402Payload, requirements: X402Requirements, provider?: INetworkProvider): Promise<{ isValid: boolean; payer: string }> {
+    static async verify(payload: X402Payload, requirements: X402Requirements, provider?: INetworkProvider, relayerManager?: RelayerManager): Promise<{ isValid: boolean; payer: string }> {
         logger.info({ sender: payload.sender, receiver: payload.receiver }, 'Verifying payment payload');
 
         // 1. Static Checks (Time)
@@ -73,14 +75,14 @@ export class Verifier {
         // 4. Simulation
         // 4. Simulation
         if (provider) {
-            await this.simulate(payload, provider);
+            await this.simulate(payload, provider, relayerManager);
         }
 
         logger.info({ sender: payload.sender }, 'Payment payload verified successfully');
         return { isValid: true, payer: payload.sender };
     }
 
-    public static async simulate(payload: X402Payload, provider: INetworkProvider) {
+    public static async simulate(payload: X402Payload, provider: INetworkProvider, relayerManager?: RelayerManager) {
         const tx = new Transaction({
             nonce: BigInt(payload.nonce),
             value: BigInt(payload.value),
@@ -94,6 +96,19 @@ export class Verifier {
             signature: Buffer.from(payload.signature, 'hex'),
             relayer: payload.relayer ? Address.newFromBech32(payload.relayer) : undefined,
         });
+
+        // 5. Relayer Signature (if relayed)
+        if (payload.relayer && relayerManager) {
+            try {
+                const relayerSigner = relayerManager.getSignerForUser(payload.sender);
+                const computer = new TransactionComputer();
+                const bytesToSign = computer.computeBytesForSigning(tx);
+                tx.relayerSignature = Uint8Array.from(await relayerSigner.sign(bytesToSign));
+                logger.info({ relayer: payload.relayer }, 'Applied relayer signature for simulation');
+            } catch (error: any) {
+                logger.warn({ error: error.message }, 'Failed to apply relayer signature for simulation, proceeding without it');
+            }
+        }
 
         try {
             const simulationResult = await provider.simulateTransaction(tx);

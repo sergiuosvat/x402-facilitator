@@ -36,7 +36,7 @@ export function createServer(dependencies: {
     app.post('/verify', async (req: Request, res: Response) => {
         try {
             const validated = VerifyRequestSchema.parse(req.body);
-            const result = await Verifier.verify(validated.payload, validated.requirements, provider);
+            const result = await Verifier.verify(validated.payload, validated.requirements, provider, relayerManager);
             res.json(result);
         } catch (error: any) {
             logger.warn({ error: error.message, body: req.body }, 'Verify request failed');
@@ -47,7 +47,7 @@ export function createServer(dependencies: {
     app.post('/settle', async (req: Request, res: Response) => {
         try {
             const validated = SettleRequestSchema.parse(req.body);
-            await Verifier.verify(validated.payload, validated.requirements, provider);
+            await Verifier.verify(validated.payload, validated.requirements, provider, relayerManager);
             const result = await settler.settle(validated.payload);
             res.json(result);
         } catch (error: any) {

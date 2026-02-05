@@ -104,16 +104,30 @@ describe('Verifier Service', () => {
         expect(mockProvider.simulateTransaction).toHaveBeenCalled();
     });
 
-    it('should NOT skip simulation even if relayer field is present', async () => {
+    it('should NOT skip simulation even if relayer field is present and should sign with relayer', async () => {
         const payload = await createPayload({ relayer: aliceBech32 });
         const mockProvider = {
             simulateTransaction: vi.fn().mockResolvedValue({
                 execution: { result: 'success' }
             })
         };
-        const result = await Verifier.verify(payload, requirements, mockProvider as any);
+
+        const mockRelayerSigner = {
+            sign: vi.fn().mockResolvedValue(Uint8Array.from(Buffer.from('relayer-sig-sim')))
+        };
+
+        const mockRelayerManager = {
+            getSignerForUser: vi.fn().mockReturnValue(mockRelayerSigner)
+        };
+
+        const result = await Verifier.verify(payload, requirements, mockProvider as any, mockRelayerManager as any);
         expect(result.isValid).toBe(true);
         expect(mockProvider.simulateTransaction).toHaveBeenCalled();
+        expect(mockRelayerManager.getSignerForUser).toHaveBeenCalledWith(payload.sender);
+
+        const simulatedTx = mockProvider.simulateTransaction.mock.calls[0][0];
+        expect(simulatedTx.relayerSignature).toBeDefined();
+        expect(Buffer.from(simulatedTx.relayerSignature).toString()).toBe('relayer-sig-sim');
     });
 
     it('should handle malformed simulation response gracefully', async () => {
