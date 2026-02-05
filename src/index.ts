@@ -7,7 +7,7 @@ import { SqliteSettlementStorage } from './storage/sqlite.js';
 import { VerifyRequestSchema, SettleRequestSchema } from './domain/schemas.js';
 import { ISettlementRecord, ISettlementStorage } from './domain/storage.js';
 import { ProxyNetworkProvider } from '@multiversx/sdk-network-providers';
-import { UserSigner } from '@multiversx/sdk-core';
+import { UserSigner, DevnetEntrypoint } from '@multiversx/sdk-core';
 import { config } from './config.js';
 import fs from 'fs';
 import path from 'path';
@@ -114,7 +114,10 @@ export function createServer(dependencies: {
 }
 
 async function start() {
-    const provider = new ProxyNetworkProvider(config.networkProvider);
+    const entrypoint = new DevnetEntrypoint({
+        url: config.networkProvider,
+    });
+    const provider = entrypoint.createNetworkProvider();
 
     let storage;
     if (config.storageType === 'sqlite') {

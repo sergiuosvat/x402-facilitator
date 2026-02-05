@@ -112,11 +112,26 @@ export class Verifier {
 
         try {
             const simulationResult = await provider.simulateTransaction(tx);
-            if (simulationResult?.execution?.result !== 'success') {
-                const message = simulationResult?.execution?.message || 'Unknown error';
-                logger.error({ error: message }, 'Simulation failed');
+
+            // Handle both flattened (API) and nested (Proxy/Gateway) structures
+            // Gateway: simulationResult.result.execution
+            // API: simulationResult.execution
+            const execution = simulationResult?.execution || simulationResult?.result?.execution;
+            const resultStatus = execution?.result;
+
+            if (resultStatus !== 'success') {
+                const message = execution?.message || simulationResult?.error || 'Unknown error';
+                logger.error({
+                    error: message,
+                    simulationResult: JSON.stringify(simulationResult)
+                }, 'Simulation failed');
                 throw new Error(`Simulation failed: ${message}`);
             }
+
+            logger.info({
+                gasConsumed: execution?.gasConsumed,
+                result: resultStatus
+            }, 'Simulation successful');
         } catch (error: any) {
             logger.error({ error: error.message }, 'Simulation error');
             throw new Error(`Simulation error: ${error.message}`);

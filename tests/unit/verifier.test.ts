@@ -130,6 +130,32 @@ describe('Verifier Service', () => {
         expect(Buffer.from(simulatedTx.relayerSignature).toString()).toBe('relayer-sig-sim');
     });
 
+    it('should pass if nested simulation (Proxy style) succeeds', async () => {
+        const payload = await createPayload();
+        const mockProvider = {
+            simulateTransaction: vi.fn().mockResolvedValue({
+                result: {
+                    execution: { result: 'success', gasConsumed: 1000 }
+                }
+            })
+        };
+        const result = await Verifier.verify(payload, requirements, mockProvider as any);
+        expect(result.isValid).toBe(true);
+        expect(mockProvider.simulateTransaction).toHaveBeenCalled();
+    });
+
+    it('should fail if nested simulation (Proxy style) fails', async () => {
+        const payload = await createPayload();
+        const mockProvider = {
+            simulateTransaction: vi.fn().mockResolvedValue({
+                result: {
+                    execution: { result: 'fail', message: 'nested error' }
+                }
+            })
+        };
+        await expect(Verifier.verify(payload, requirements, mockProvider as any)).rejects.toThrow('Simulation failed: nested error');
+    });
+
     it('should handle malformed simulation response gracefully', async () => {
         const payload = await createPayload();
         const mockProvider = {
