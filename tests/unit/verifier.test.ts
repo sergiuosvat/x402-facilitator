@@ -96,7 +96,7 @@ describe('Verifier Service', () => {
         const payload = await createPayload();
         const mockProvider = {
             simulateTransaction: vi.fn().mockResolvedValue({
-                execution: { result: 'success' }
+                status: { status: 'success' }
             })
         };
         const result = await Verifier.verify(payload, requirements, mockProvider);
@@ -108,7 +108,7 @@ describe('Verifier Service', () => {
         const payload = await createPayload({ relayer: aliceBech32 });
         const mockProvider = {
             simulateTransaction: vi.fn().mockResolvedValue({
-                execution: { result: 'success' }
+                status: { status: 'success' }
             })
         };
 
@@ -134,9 +134,8 @@ describe('Verifier Service', () => {
         const payload = await createPayload();
         const mockProvider = {
             simulateTransaction: vi.fn().mockResolvedValue({
-                result: {
-                    execution: { result: 'success', gasConsumed: 1000 }
-                }
+                status: { status: 'success' },
+                gasConsumed: 1000
             })
         };
         const result = await Verifier.verify(payload, requirements, mockProvider as any);
@@ -148,9 +147,8 @@ describe('Verifier Service', () => {
         const payload = await createPayload();
         const mockProvider = {
             simulateTransaction: vi.fn().mockResolvedValue({
-                result: {
-                    execution: { result: 'fail', message: 'nested error' }
-                }
+                status: { status: 'fail' },
+                error: 'nested error'
             })
         };
         await expect(Verifier.verify(payload, requirements, mockProvider as any)).rejects.toThrow('Simulation failed: nested error');
@@ -171,7 +169,8 @@ describe('Verifier Service', () => {
         const payload = await createPayload();
         const mockProvider = {
             simulateTransaction: vi.fn().mockResolvedValue({
-                execution: { result: 'fail', message: 'invalid nonce' }
+                status: { status: 'fail' },
+                error: 'invalid nonce'
             })
         };
         await expect(Verifier.verify(payload, requirements, mockProvider as any)).rejects.toThrow('Simulation failed: invalid nonce');

@@ -113,14 +113,12 @@ export class Verifier {
         try {
             const simulationResult = await provider.simulateTransaction(tx);
 
-            // Handle both flattened (API) and nested (Proxy/Gateway) structures
-            // Gateway: simulationResult.result.execution
-            // API: simulationResult.execution
-            const execution = simulationResult?.execution || simulationResult?.result?.execution;
-            const resultStatus = execution?.result;
+            const statusFromStatus = simulationResult?.status?.status;
+            const statusFromRaw = simulationResult?.raw?.status;
+            const resultStatus = statusFromStatus || statusFromRaw;
 
             if (resultStatus !== 'success') {
-                const message = execution?.message || simulationResult?.error || 'Unknown error';
+                const message = simulationResult?.error || 'Unknown error';
                 logger.error({
                     error: message,
                     simulationResult: JSON.stringify(simulationResult)
@@ -129,7 +127,7 @@ export class Verifier {
             }
 
             logger.info({
-                gasConsumed: execution?.gasConsumed,
+                gasConsumed: simulationResult?.gasConsumed,
                 result: resultStatus
             }, 'Simulation successful');
         } catch (error: any) {
