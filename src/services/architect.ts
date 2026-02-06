@@ -88,10 +88,20 @@ export class Architect {
             provider.queryContract(priceQuery),
         ]);
 
+        logger.info({ ownerRes, priceRes }, 'Facilitator: Registry query results');
+
+        // Robust check for returnData vs returnDataParts
+        const ownerData = ownerRes.returnData || ownerRes.returnDataParts;
+        const priceData = priceRes.returnData || priceRes.returnDataParts;
+
+        if (!ownerData || ownerData.length === 0 || !priceData || priceData.length === 0) {
+            logger.error({ ownerData, priceData }, 'Facilitator: Missing registry return data');
+            throw new Error('Failed to fetch agent details from registry: missing data');
+        }
+
         // Parse Results
-        // For simplicity, we assume the provider returns a result object with base64 encoded data
-        const ownerBuffer = Buffer.from(ownerRes.returnData[0], 'base64');
-        const priceBuffer = Buffer.from(priceRes.returnData[0], 'base64');
+        const ownerBuffer = Buffer.from(ownerData[0], 'base64');
+        const priceBuffer = Buffer.from(priceData[0], 'base64');
 
         const owner = new Address(ownerBuffer).toBech32();
         const price = BigInt('0x' + priceBuffer.toString('hex')).toString();

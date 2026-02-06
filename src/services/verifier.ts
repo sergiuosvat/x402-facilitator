@@ -112,28 +112,34 @@ export class Verifier {
         }
 
         try {
+            logger.info({ tx: JSON.stringify(tx.toPlainObject()) }, 'Facilitator: Simulating transaction...');
             const simulationResult = await provider.simulateTransaction(tx);
+            logger.info({ simulationResult: JSON.stringify(simulationResult) }, 'Facilitator: Simulation result received');
 
             const statusFromStatus = simulationResult?.status?.status;
             const statusFromRaw = simulationResult?.raw?.status;
-            const resultStatus = statusFromStatus || statusFromRaw;
+            const execution =
+                simulationResult?.execution || simulationResult?.result?.execution;
+            const resultStatus =
+                statusFromStatus || statusFromRaw || execution?.result;
 
             if (resultStatus !== 'success') {
-                const message = simulationResult?.error || 'Unknown error';
+                const message =
+                    execution?.message || simulationResult?.error || 'Unknown error';
                 logger.error({
                     error: message,
-                    simulationResult: JSON.stringify(simulationResult)
-                }, 'Simulation failed');
+                    fullResult: JSON.stringify(simulationResult)
+                }, 'Facilitator: Simulation failed');
                 throw new Error(`Simulation failed: ${message}`);
             }
 
             logger.info({
-                gasConsumed: simulationResult?.gasConsumed,
+                gasConsumed: execution?.gasConsumed,
                 result: resultStatus
-            }, 'Simulation successful');
+            }, 'Facilitator: Simulation successful');
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            logger.error({ error: errorMessage }, 'Simulation error');
+            logger.error({ error: errorMessage }, 'Facilitator: Simulation error caught');
             throw new Error(`Simulation error: ${errorMessage}`);
         }
     }
