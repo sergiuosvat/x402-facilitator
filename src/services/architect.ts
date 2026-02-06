@@ -1,9 +1,13 @@
-import { Address, Query, U64Value, BytesValue } from '@multiversx/sdk-core';
+import { Address, SmartContractQuery, AbiRegistry, SmartContractTransactionsFactory, TransactionsFactoryConfig, ArgSerializer, NativeSerializer } from '@multiversx/sdk-core';
 import { INetworkProvider } from '../domain/network.js';
 import { config } from '../config.js';
 import { pino } from 'pino';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const logger = pino();
 
 export interface PrepareRequest {
@@ -22,10 +26,24 @@ export interface PrepareResponse {
 }
 
 export class Architect {
+    private static identityAbi: AbiRegistry;
+    private static validationAbi: AbiRegistry;
+
+    private static initializeAbis() {
+        if (this.identityAbi && this.validationAbi) return;
+
+        const identityPath = path.join(__dirname, '../abis/identity-registry.abi.json');
+        const validationPath = path.join(__dirname, '../abis/validation-registry.abi.json');
+
+        this.identityAbi = AbiRegistry.create(JSON.parse(fs.readFileSync(identityPath, 'utf8')));
+        this.validationAbi = AbiRegistry.create(JSON.parse(fs.readFileSync(validationPath, 'utf8')));
+    }
+
     static async prepare(
         request: PrepareRequest,
         provider: INetworkProvider
     ): Promise<PrepareResponse> {
+        this.initializeAbis();
         const jobId = request.jobId || crypto.randomBytes(32).toString('hex');
         logger.info({ agentNonce: request.agentNonce, serviceId: request.serviceId }, 'Preparing job initialization');
 
@@ -39,10 +57,10 @@ export class Architect {
             provider
         );
 
-        // 2. Construct transaction data for init_job_with_payment
-        // Function name: init_job_with_payment
-        // Arguments: [job_id (buffer), agent_nonce (u64), service_id (buffer)]
-        const data = this.constructDataField(
+        // 2. Construct transaction data for init_job_with_payment using TransactionsFactory
+        const validationAddr = Address.newFromBech32(config.validationRegistryAddress);
+        const data = await this.constructDataField(
+            validationAddr,
             jobId,
             request.agentNonce,
             request.serviceId
@@ -63,24 +81,20 @@ export class Architect {
         registryAddr: Address,
         provider: INetworkProvider
     ): Promise<{ owner: string; price: string }> {
-        // Query IdentityRegistry for owner and price
-        // Note: We modified IdentityRegistry to have:
-        // getAgentOwner(nonce: u64) -> ManagedAddress
-        // getAgentServicePrice(nonce: u64, service_id: ManagedBuffer) -> BigUint
+        const serializer = new ArgSerializer();
 
-        const ownerQuery = new Query({
-            address: registryAddr,
-            func: 'get_agent_owner',
-            args: [new U64Value(BigInt(nonce))],
+        // Query IdentityRegistry for owner
+        const ownerQuery = new SmartContractQuery({
+            contract: registryAddr,
+            function: 'get_agent_owner',
+            arguments: serializer.valuesToBuffers(NativeSerializer.nativeToTypedValues([nonce], this.identityAbi.getEndpoint('get_agent_owner'))),
         });
 
-        const priceQuery = new Query({
-            address: registryAddr,
-            func: 'get_agent_service_price',
-            args: [
-                new U64Value(BigInt(nonce)),
-                new BytesValue(Buffer.from(serviceId))
-            ],
+        // Query IdentityRegistry for price
+        const priceQuery = new SmartContractQuery({
+            contract: registryAddr,
+            function: 'get_agent_service_price',
+            arguments: serializer.valuesToBuffers(NativeSerializer.nativeToTypedValues([nonce, Buffer.from(serviceId)], this.identityAbi.getEndpoint('get_agent_service_price'))),
         });
 
         const [ownerRes, priceRes] = await Promise.all([
@@ -88,36 +102,51 @@ export class Architect {
             provider.queryContract(priceQuery),
         ]);
 
-        logger.info({ ownerRes, priceRes }, 'Facilitator: Registry query results');
+        const ownerValues = serializer.buffersToValues(ownerRes.returnDataParts.map((p: string) => Buffer.from(p, 'base64')), this.identityAbi.getEndpoint('get_agent_owner').output);
+        const priceValues = serializer.buffersToValues(priceRes.returnDataParts.map((p: string) => Buffer.from(p, 'base64')), this.identityAbi.getEndpoint('get_agent_service_price').output);
 
-        // Robust check for returnData vs returnDataParts
-        const ownerData = ownerRes.returnData || ownerRes.returnDataParts;
-        const priceData = priceRes.returnData || priceRes.returnDataParts;
+        const owner: string = (ownerValues[0].valueOf() as Address).toBech32();
+        const price: string = priceValues[0] ? priceValues[0].valueOf().toString() : '0';
 
-        if (!ownerData || ownerData.length === 0 || !priceData || priceData.length === 0) {
-            logger.error({ ownerData, priceData }, 'Facilitator: Missing registry return data');
-            throw new Error('Failed to fetch agent details from registry: missing data');
+        if (!owner) {
+            throw new Error(`Failed to fetch agent owner from registry for nonce ${nonce}`);
         }
-
-        // Parse Results
-        const ownerBuffer = Buffer.from(ownerData[0], 'base64');
-        const priceBuffer = Buffer.from(priceData[0], 'base64');
-
-        const owner = new Address(ownerBuffer).toBech32();
-        const price = BigInt('0x' + priceBuffer.toString('hex')).toString();
 
         logger.info({ owner, price }, 'Facilitator: Resolved agent details');
 
         return { owner, price };
     }
 
-    private static constructDataField(jobId: string, nonce: number, serviceId: string): string {
-        // init_job_with_payment @ job_id @ agent_nonce @ service_id
-        const func = 'init_job_with_payment';
-        const jobIdHex = Buffer.from(jobId).toString('hex');
-        const nonceHex = nonce.toString(16).padStart(16, '0');
-        const serviceIdHex = Buffer.from(serviceId).toString('hex');
+    private static async constructDataField(
+        validationAddr: Address,
+        jobId: string,
+        nonce: number,
+        serviceId: string
+    ): Promise<string> {
+        this.initializeAbis();
+        const factory = new SmartContractTransactionsFactory({
+            abi: this.validationAbi,
+            config: new TransactionsFactoryConfig({ chainID: 'D' })
+        });
 
-        return `${func}@${jobIdHex}@${nonceHex}@${serviceIdHex}`;
+        const endpoint = this.validationAbi.getEndpoint('init_job_with_payment');
+        const typedArgs = NativeSerializer.nativeToTypedValues([
+            Buffer.from(jobId),
+            BigInt(nonce),
+            Buffer.from(serviceId)
+        ], endpoint);
+
+        // Use the factory to create a transaction, then extract the data field
+        const tx = await factory.createTransactionForExecute(
+            new Address(Buffer.alloc(32)), // Placeholder
+            {
+                contract: validationAddr,
+                function: 'init_job_with_payment',
+                arguments: typedArgs,
+                gasLimit: 0n
+            }
+        );
+
+        return Buffer.from(tx.data).toString();
     }
 }
