@@ -20,6 +20,8 @@ export interface PrepareRequest {
 export interface PrepareResponse {
     jobId: string;
     amount: string;
+    token: string;
+    pnonce: number;
     receiver: string;
     data: string;
     registryAddress: string;
@@ -49,8 +51,8 @@ export class Architect {
 
         const identityAddr = Address.newFromBech32(config.identityRegistryAddress);
 
-        // 1. Resolve agent owner and price
-        const { owner, price } = await this.resolveAgentDetails(
+        // 1. Resolve agent owner and full service config (price, token, pnonce)
+        const { owner, price, token, pnonce } = await this.resolveAgentDetails(
             request.agentNonce,
             request.serviceId,
             identityAddr,
@@ -69,6 +71,8 @@ export class Architect {
         return {
             jobId,
             amount: price,
+            token,
+            pnonce,
             receiver: owner,
             data,
             registryAddress: config.validationRegistryAddress,
@@ -80,7 +84,7 @@ export class Architect {
         serviceId: string,
         registryAddr: Address,
         provider: INetworkProvider
-    ): Promise<{ owner: string; price: string }> {
+    ): Promise<{ owner: string; price: string; token: string; pnonce: number }> {
         const serializer = new ArgSerializer();
 
         // Query IdentityRegistry for owner
@@ -90,31 +94,35 @@ export class Architect {
             arguments: serializer.valuesToBuffers(NativeSerializer.nativeToTypedValues([nonce], this.identityAbi.getEndpoint('get_agent_owner'))),
         });
 
-        // Query IdentityRegistry for price
-        const priceQuery = new SmartContractQuery({
+        // Query IdentityRegistry for full service configuration (Unified Call)
+        const configQuery = new SmartContractQuery({
             contract: registryAddr,
-            function: 'get_agent_service_price',
-            arguments: serializer.valuesToBuffers(NativeSerializer.nativeToTypedValues([nonce, Buffer.from(serviceId)], this.identityAbi.getEndpoint('get_agent_service_price'))),
+            function: 'get_agent_service_config',
+            arguments: serializer.valuesToBuffers(NativeSerializer.nativeToTypedValues([nonce, Buffer.from(serviceId)], this.identityAbi.getEndpoint('get_agent_service_config'))),
         });
 
-        const [ownerRes, priceRes] = await Promise.all([
+        const [ownerRes, configRes] = await Promise.all([
             provider.queryContract(ownerQuery),
-            provider.queryContract(priceQuery),
+            provider.queryContract(configQuery),
         ]);
 
         const ownerValues = serializer.buffersToValues(ownerRes.returnDataParts.map((p: string) => Buffer.from(p, 'base64')), this.identityAbi.getEndpoint('get_agent_owner').output);
-        const priceValues = serializer.buffersToValues(priceRes.returnDataParts.map((p: string) => Buffer.from(p, 'base64')), this.identityAbi.getEndpoint('get_agent_service_price').output);
+        const configValues = serializer.buffersToValues(configRes.returnDataParts.map((p: string) => Buffer.from(p, 'base64')), this.identityAbi.getEndpoint('get_agent_service_config').output);
 
         const owner: string = (ownerValues[0].valueOf() as Address).toBech32();
-        const price: string = priceValues[0] ? priceValues[0].valueOf().toString() : '0';
+        const serviceConfig = configValues[0].valueOf() as any;
+
+        const price = serviceConfig.price.toString();
+        const token = serviceConfig.token.identifier.toString();
+        const pnonce = Number(serviceConfig.pnonce);
 
         if (!owner) {
             throw new Error(`Failed to fetch agent owner from registry for nonce ${nonce}`);
         }
 
-        logger.info({ owner, price }, 'Facilitator: Resolved agent details');
+        logger.info({ owner, price, token, pnonce }, 'Facilitator: Resolved agent details and service config');
 
-        return { owner, price };
+        return { owner, price, token, pnonce };
     }
 
     private static async constructDataField(

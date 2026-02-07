@@ -12,6 +12,12 @@ export interface AgentDetails {
     metadata: Array<{ key: string; value: string }>;
 }
 
+export interface AgentServiceConfig {
+    token: { identifier: string; nonce?: number };
+    pnonce: number;
+    price: bigint;
+}
+
 export class BlockchainService {
     private controller: SmartContractController;
     private entrypoint: DevnetEntrypoint | TestnetEntrypoint | MainnetEntrypoint;
@@ -53,5 +59,15 @@ export class BlockchainService {
         });
 
         return results[0] as bigint;
+    }
+
+    async getAgentServiceConfig(nonce: number, serviceId: string): Promise<AgentServiceConfig> {
+        const results = await this.controller.query({
+            contract: Address.newFromBech32(this.registryAddress),
+            function: 'get_agent_service_config',
+            arguments: [nonce, Buffer.from(serviceId)],
+        });
+
+        return results[0] as AgentServiceConfig;
     }
 }
