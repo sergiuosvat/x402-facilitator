@@ -4,7 +4,7 @@ import { pino } from 'pino';
 import { INetworkProvider } from '../domain/network.js';
 import { RelayerManager } from './relayer_manager.js';
 import { BlockchainService } from './blockchain.js';
-import { CONFIG } from '../config.js';
+import { config as CONFIG } from '../config.js';
 
 const logger = pino();
 
@@ -20,7 +20,7 @@ export class Verifier {
 
         // 1. Requirement Resolution (v2.1)
         // If requirements are partial, try to resolve from Identity Registry
-        let resolvedRequirements = { ...requirements };
+        const resolvedRequirements = { ...requirements };
         const jobId = this.extractJobId(payload.data);
 
         if (blockchainService && jobId && !requirements.amount) {
@@ -143,10 +143,25 @@ export class Verifier {
         }
 
         const simulationResult = await provider.simulateTransaction(tx);
+
+        // Robust Parser: Handle both flattened (API) and nested (Proxy/Gateway) structures
+        // as implemented in RelayerService
+        const statusFromStatus = simulationResult?.status?.status;
+        const statusFromRaw = simulationResult?.raw?.status;
         const execution = simulationResult?.execution || simulationResult?.result?.execution;
 
-        if ((simulationResult?.status?.status || simulationResult?.raw?.status || execution?.result) !== 'success') {
-            throw new Error(`Simulation failed: ${execution?.message || 'Unknown error'}`);
+        // Check shard-specific status in raw if top-level status is missing
+        const receiverShardStatus = simulationResult?.raw?.receiverShard?.status;
+        const senderShardStatus = simulationResult?.raw?.senderShard?.status;
+        const shardSuccess = (receiverShardStatus === 'success') && (!senderShardStatus || senderShardStatus === 'success');
+
+        const resultStatus =
+            statusFromStatus || statusFromRaw || execution?.result || (shardSuccess ? 'success' : '');
+
+        if (resultStatus !== 'success') {
+            const message = execution?.message || simulationResult?.error || 'Unknown error';
+            logger.error({ error: message, result: simulationResult }, 'Simulation failed');
+            throw new Error(`Simulation failed: ${message}`);
         }
     }
 
@@ -160,7 +175,7 @@ export class Verifier {
             throw new Error('Invalid MultiESDTNFTTransfer data');
         }
 
-        const actualReceiver = Address.fromHex(parts[1]).toBech32();
+        const actualReceiver = Address.newFromHex(parts[1]).toBech32();
         const actualToken = Buffer.from(parts[3], 'hex').toString();
         const actualAmount = BigInt('0x' + parts[5]);
 

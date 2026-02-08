@@ -40,6 +40,9 @@ describe('Architect Service', () => {
         const mockOwner = new Address(Buffer.alloc(32));
         const mockPrice = 1000000000000000000n; // 1 EGLD
 
+        // Initialize ABIs first so we can use them in the mock
+        (Architect as any).initializeAbis();
+
         mockProvider.queryContract.mockImplementation(async (query) => {
             if (query.function === 'get_agent_owner') {
                 return {
@@ -47,17 +50,50 @@ describe('Architect Service', () => {
                     returnCode: 'ok'
                 };
             }
-            if (query.function === 'get_agent_service_price') {
+            if (query.function === 'get_agent_service_config') {
+                const endpoint = (Architect as any).identityAbi.getEndpoint('get_agent_service_config');
+                // ServiceConfig struct: price (BigUint), token (TokenIdentifier), pnonce (u64)
+                // derived from ABI. We simulate the object.
+                const mockConfig = {
+                    price: mockPrice,
+                    token: 'EGLD', // or 'USDC-123456'
+                    pnonce: 10
+                };
+
+                // NativeSerializer to pack it according to ABI
+                // The output is a Type (Struct), so nativeToTypedValue expects the object.
+                // We rely on the ABI loaded in Architect.
+
+
+                // Manually construct the ServiceConfig struct buffer to avoid NativeSerializer issues
+                // Struct format: token (EgldOrEsdtTokenIdentifier), pnonce (u64), price (BigUint)
+
+                // 1. Token (EgldOrEsdtTokenIdentifier - Enum)
+                // Variant 0 (Egld) -> 0x00000000 (u32)
+                const tokenBuf = Buffer.alloc(4);
+
+                // 2. Pnonce (u64 = 10)
+                const pnonceBuf = Buffer.alloc(8); pnonceBuf.writeBigUInt64BE(BigInt(10));
+
+                // 3. Price (BigUint = mockPrice)
+                let priceHex = mockPrice.toString(16);
+                if (priceHex.length % 2 !== 0) priceHex = '0' + priceHex;
+                const priceBuf = Buffer.from(priceHex, 'hex');
+                const priceLen = Buffer.alloc(4); priceLen.writeUInt32BE(priceBuf.length);
+
+                const structBuf = Buffer.concat([tokenBuf, pnonceBuf, priceLen, priceBuf]);
+
+                const buffers = [structBuf];
+
                 return {
-                    returnDataParts: [Buffer.from(mockPrice.toString(16).padStart(16, '0'), 'hex').toString('base64')],
+                    returnDataParts: buffers.map(b => b.toString('base64')),
                     returnCode: 'ok'
                 };
             }
             return { returnDataParts: [], returnCode: 'ok' };
         });
 
-        // Initialize ABIs first (it's called in prepare, but here we test the private resolve method)
-        (Architect as any).initializeAbis();
+
 
         const result = await (Architect as any).resolveAgentDetails(
             nonce,

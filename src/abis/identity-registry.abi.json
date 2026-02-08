@@ -78,7 +78,8 @@
                     "multi_arg": true
                 }
             ],
-            "outputs": []
+            "outputs": [],
+            "allow_multiple_var_args": true
         },
         {
             "docs": [
@@ -148,6 +149,28 @@
                 {
                     "type": "optional<bytes>",
                     "multi_result": true
+                }
+            ]
+        },
+        {
+            "docs": [
+                "Get the complete payment configuration for a specific agent service in one call."
+            ],
+            "name": "get_agent_service_config",
+            "mutability": "readonly",
+            "inputs": [
+                {
+                    "name": "nonce",
+                    "type": "u64"
+                },
+                {
+                    "name": "service_id",
+                    "type": "bytes"
+                }
+            ],
+            "outputs": [
+                {
+                    "type": "AgentServiceConfig"
                 }
             ]
         },
@@ -232,6 +255,44 @@
             "outputs": [
                 {
                     "type": "BigUint"
+                }
+            ]
+        },
+        {
+            "name": "get_agent_service_payment_token",
+            "mutability": "readonly",
+            "inputs": [
+                {
+                    "name": "nonce",
+                    "type": "u64"
+                },
+                {
+                    "name": "service_id",
+                    "type": "bytes"
+                }
+            ],
+            "outputs": [
+                {
+                    "type": "EgldOrEsdtTokenIdentifier"
+                }
+            ]
+        },
+        {
+            "name": "get_agent_service_payment_nonce",
+            "mutability": "readonly",
+            "inputs": [
+                {
+                    "name": "nonce",
+                    "type": "u64"
+                },
+                {
+                    "name": "service_id",
+                    "type": "bytes"
+                }
+            ],
+            "outputs": [
+                {
+                    "type": "u64"
                 }
             ]
         }
@@ -319,6 +380,23 @@
                 {
                     "name": "uri",
                     "type": "bytes"
+                }
+            ]
+        },
+        "AgentServiceConfig": {
+            "type": "struct",
+            "fields": [
+                {
+                    "name": "token",
+                    "type": "EgldOrEsdtTokenIdentifier"
+                },
+                {
+                    "name": "pnonce",
+                    "type": "u64"
+                },
+                {
+                    "name": "price",
+                    "type": "BigUint"
                 }
             ]
         },

@@ -7,7 +7,7 @@
     "scripts": {
         "start": "node dist/index.js",
         "dev": "tsx watch src/index.ts",
-        "build": "tsc",
+        "build": "tsc && mkdir -p dist/abis && cp -r src/abis/* dist/abis/",
         "test": "vitest run",
         "test:watch": "vitest",
         "lint": "eslint src/**/*.ts"

@@ -187,7 +187,7 @@ describe('Verifier Service', () => {
         it('should verify a valid ESDT MultiESDTNFTTransfer', async () => {
             // MultiESDTNFTTransfer data format:
             // MultiESDTNFTTransfer@receiverAddressHex@numTopics@tokenIdentifierHex@nonceHex@amountHex
-            const receiverHex = bobAddress.valueOf().toString('hex');
+            const receiverHex = bobAddress.getPublicKey().toString('hex');
             const tokenHex = Buffer.from('TEST-abcd').toString('hex');
             const data = `MultiESDTNFTTransfer@${receiverHex}@01@${tokenHex}@00@1388`; // 1388 hex is 5000
 
@@ -202,7 +202,7 @@ describe('Verifier Service', () => {
         });
 
         it('should fail if ESDT amount is insufficient', async () => {
-            const receiverHex = bobAddress.valueOf().toString('hex');
+            const receiverHex = bobAddress.getPublicKey().toString('hex');
             const tokenHex = Buffer.from('TEST-abcd').toString('hex');
             const data = `MultiESDTNFTTransfer@${receiverHex}@01@${tokenHex}@00@03E8`; // 03E8 hex is 1000
 
@@ -216,7 +216,7 @@ describe('Verifier Service', () => {
         });
 
         it('should fail if ESDT token mismatch', async () => {
-            const receiverHex = bobAddress.valueOf().toString('hex');
+            const receiverHex = bobAddress.getPublicKey().toString('hex');
             const tokenHex = Buffer.from('WRONG-token').toString('hex');
             const data = `MultiESDTNFTTransfer@${receiverHex}@01@${tokenHex}@00@1388`;
 

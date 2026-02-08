@@ -2,7 +2,7 @@ import { Abi, Address, DevnetEntrypoint, MainnetEntrypoint, TestnetEntrypoint, S
 import { pino } from 'pino';
 import identityAbiJson from '../abis/identity-registry.abi.json' with { type: 'json' };
 
-const logger = pino();
+
 
 export interface AgentDetails {
     name: string;

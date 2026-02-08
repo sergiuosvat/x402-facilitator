@@ -35,6 +35,10 @@ export function createServer(dependencies: {
     const cleanupService = new CleanupService(storage);
     cleanupService.start();
 
+    app.get('/health', (req: Request, res: Response) => {
+        res.json({ status: 'ok' });
+    });
+
     app.post('/verify', async (req: Request, res: Response) => {
         try {
             const validated = VerifyRequestSchema.parse(req.body);
@@ -156,9 +160,7 @@ async function start() {
     });
 }
 
-if (require.main === module) {
-    start().catch(err => {
-        logger.error({ error: err.message }, 'Failed to start server');
-        process.exit(1);
-    });
-}
+start().catch(err => {
+    logger.error({ error: err.message }, 'Failed to start server');
+    process.exit(1);
+});

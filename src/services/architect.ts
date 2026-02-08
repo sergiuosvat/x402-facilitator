@@ -113,7 +113,16 @@ export class Architect {
         const serviceConfig = configValues[0].valueOf() as any;
 
         const price = serviceConfig.price.toString();
-        const token = serviceConfig.token.identifier.toString();
+
+        let token = 'EGLD';
+        if (serviceConfig.token && serviceConfig.token.identifier) {
+            token = serviceConfig.token.identifier.toString();
+        } else if (serviceConfig.token && typeof serviceConfig.token.toString === 'function') {
+            const str = serviceConfig.token.toString();
+            // If it's the Enum object for EGLD, it might be 'Egld' or empty.
+            // We default to EGLD if no identifier.
+            if (str !== 'Egld' && str !== '') token = str;
+        }
         const pnonce = Number(serviceConfig.pnonce);
 
         if (!owner) {
