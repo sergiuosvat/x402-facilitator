@@ -117,6 +117,11 @@ export class Verifier {
     }
 
     private static async simulate(payload: X402Payload, provider: INetworkProvider, relayerManager?: RelayerManager) {
+        if (process.env.SKIP_SIMULATION === 'true' || process.env.SKIP_SIMULATION === '1') {
+            logger.warn('Skipping simulation as per SKIP_SIMULATION env var');
+            return;
+        }
+
         const tx = new Transaction({
             nonce: BigInt(payload.nonce),
             value: BigInt(payload.value),
