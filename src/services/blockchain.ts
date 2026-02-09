@@ -36,7 +36,13 @@ export class BlockchainService {
             this.entrypoint = new DevnetEntrypoint({ url: apiUrl, kind });
         }
 
-        const abi = Abi.create(identityAbiJson);
+        // Patch ABI types that sdk-core TypeMapper doesn't recognize
+        const patchedAbiJson = JSON.parse(
+            JSON.stringify(identityAbiJson)
+                .replace(/"TokenId"/g, '"TokenIdentifier"')
+                .replace(/"NonZeroBigUint"/g, '"BigUint"')
+        );
+        const abi = Abi.create(patchedAbiJson);
         this.controller = this.entrypoint.createSmartContractController(abi);
     }
 
