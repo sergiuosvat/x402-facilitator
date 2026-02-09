@@ -44,8 +44,18 @@ export class Architect {
         const identityPath = path.join(__dirname, '../abis/identity-registry.abi.json');
         const validationPath = path.join(__dirname, '../abis/validation-registry.abi.json');
 
-        this.identityAbi = Abi.create(JSON.parse(fs.readFileSync(identityPath, 'utf8')));
-        this.validationAbi = Abi.create(JSON.parse(fs.readFileSync(validationPath, 'utf8')));
+        // Patch ABI types that sdk-core TypeMapper doesn't recognize
+        const patchAbiTypes = (abiJson: any) => {
+            const raw = JSON.stringify(abiJson);
+            return JSON.parse(
+                raw
+                    .replace(/"TokenId"/g, '"TokenIdentifier"')
+                    .replace(/"NonZeroBigUint"/g, '"BigUint"'),
+            );
+        };
+
+        this.identityAbi = Abi.create(patchAbiTypes(JSON.parse(fs.readFileSync(identityPath, 'utf8'))));
+        this.validationAbi = Abi.create(patchAbiTypes(JSON.parse(fs.readFileSync(validationPath, 'utf8'))));
 
         const apiUrl = config.networkProvider;
         const kind = apiUrl.includes('api') ? 'api' as const : 'proxy' as const;
