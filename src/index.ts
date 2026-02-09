@@ -10,7 +10,6 @@ import { SqliteSettlementStorage } from './storage/sqlite.js';
 import { VerifyRequestSchema, SettleRequestSchema } from './domain/schemas.js';
 import { ISettlementRecord, ISettlementStorage } from './domain/storage.js';
 import { ProxyNetworkProvider } from '@multiversx/sdk-network-providers';
-import { UserSigner, DevnetEntrypoint } from '@multiversx/sdk-core';
 import { config } from './config.js';
 import fs from 'fs';
 import path from 'path';
