@@ -4,6 +4,7 @@ import { pino } from 'pino';
 import { INetworkProvider } from '../domain/network.js';
 import { RelayerManager } from './relayer_manager.js';
 import { BlockchainService } from './blockchain.js';
+import { parseSimulationResult } from '../utils/simulationParser.js';
 
 const logger = pino();
 
@@ -148,24 +149,10 @@ export class Verifier {
 
         const simulationResult = await provider.simulateTransaction(tx);
 
-        // Robust Parser: Handle both flattened (API) and nested (Proxy/Gateway) structures
-        // as implemented in RelayerService
-        const statusFromStatus = simulationResult?.status?.status;
-        const statusFromRaw = simulationResult?.raw?.status;
-        const execution = simulationResult?.execution || simulationResult?.result?.execution;
-
-        // Check shard-specific status in raw if top-level status is missing
-        const receiverShardStatus = simulationResult?.raw?.receiverShard?.status;
-        const senderShardStatus = simulationResult?.raw?.senderShard?.status;
-        const shardSuccess = (receiverShardStatus === 'success') && (!senderShardStatus || senderShardStatus === 'success');
-
-        const resultStatus =
-            statusFromStatus || statusFromRaw || execution?.result || (shardSuccess ? 'success' : '');
-
-        if (resultStatus !== 'success') {
-            const message = execution?.message || simulationResult?.error || 'Unknown error';
-            logger.error({ error: message, result: simulationResult }, 'Simulation failed');
-            throw new Error(`Simulation failed: ${message}`);
+        const { success, errorMessage } = parseSimulationResult(simulationResult);
+        if (!success) {
+            logger.error({ error: errorMessage, result: simulationResult }, 'Simulation failed');
+            throw new Error(`Simulation failed: ${errorMessage}`);
         }
     }
 

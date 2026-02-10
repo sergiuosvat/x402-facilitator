@@ -3,6 +3,7 @@ import { X402Payload } from '../domain/types.js';
 import { ISettlementStorage } from '../domain/storage.js';
 import crypto from 'crypto';
 import { pino } from 'pino';
+import { parseSimulationResult } from '../utils/simulationParser.js';
 
 const logger = pino();
 
@@ -129,9 +130,10 @@ export class Settler {
             relayer: relayerAddress,
             gasPrice: BigInt(payload.gasPrice),
             gasLimit: BigInt(payload.gasLimit),
-            data: payload.data ? Uint8Array.from(Buffer.from(payload.data)) : undefined,
+            data: payload.data ? Uint8Array.from(Buffer.from(payload.data)) : new Uint8Array(0),
             chainID: payload.chainID,
             version: payload.version,
+            options: payload.options,
             signature: Uint8Array.from(Buffer.from(payload.signature, 'hex')),
         });
 
@@ -148,22 +150,11 @@ export class Settler {
                         typeof v === 'bigint' ? v.toString() : v)
                 }, 'Relayed V3 simulation result');
 
-                // Robust parser: handle both API and Proxy/Gateway response structures
-                const statusFromStatus = simulationResult?.status?.status;
-                const statusFromRaw = simulationResult?.raw?.status;
-                const execution = simulationResult?.execution || simulationResult?.result?.execution;
-                const receiverShardStatus = simulationResult?.raw?.receiverShard?.status;
-                const senderShardStatus = simulationResult?.raw?.senderShard?.status;
-                const shardSuccess = (receiverShardStatus === 'success') &&
-                    (!senderShardStatus || senderShardStatus === 'success');
+                const { success, errorMessage } = parseSimulationResult(simulationResult);
 
-                const resultStatus = statusFromStatus || statusFromRaw ||
-                    execution?.result || (shardSuccess ? 'success' : '');
-
-                if (resultStatus !== 'success') {
-                    const message = execution?.message || simulationResult?.error || 'Unknown simulation error';
-                    logger.error({ message }, 'Relayed V3 simulation failed');
-                    throw new Error(`On-chain simulation failed: ${message}`);
+                if (!success) {
+                    logger.error({ message: errorMessage }, 'Relayed V3 simulation failed');
+                    throw new Error(`On-chain simulation failed: ${errorMessage}`);
                 }
                 logger.info('Relayed V3 simulation successful');
             } catch (simError: unknown) {

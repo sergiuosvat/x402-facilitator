@@ -15,6 +15,12 @@ export class SqliteSettlementStorage implements ISettlementStorage {
 
         await this.db.exec(`
             CREATE TABLE IF NOT EXISTS settlements (
+                id TEXT PRIMARY KEY,
+                signature TEXT NOT NULL,
+                payer TEXT NOT NULL,
+                status TEXT NOT NULL,
+                txHash TEXT,
+                validBefore INTEGER,
                 createdAt INTEGER NOT NULL,
                 isRead INTEGER DEFAULT 0,
                 amount TEXT,
