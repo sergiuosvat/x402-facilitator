@@ -123,13 +123,13 @@ export class Architect {
         const owner: string = (ownerResults[0] as Address).toBech32();
         const serviceConfig = configResults[0] as AgentServiceConfig;
 
-        const price = serviceConfig.price.toString();
+        const price = serviceConfig?.price?.toString() ?? "0";
 
         let token = 'EGLD';
-        if (serviceConfig.token && serviceConfig.token.identifier) {
+        if (serviceConfig?.token && serviceConfig?.token?.identifier) {
             token = serviceConfig.token.identifier.toString();
         }
-        const pnonce = Number(serviceConfig.pnonce);
+        const pnonce = Number(serviceConfig?.pnonce ?? 0);
 
         if (!owner) {
             throw new Error(`Failed to fetch agent owner from registry for nonce ${nonce}`);
